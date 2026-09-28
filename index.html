@@ -1,0 +1,1218 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Multi-Visions — Une photo, mille vidéos</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    :root {
+        --bg: #0e0e12; --panel: #17171d; --panel-2: #1f1f27; --border: #2a2a35;
+        --ink: #f5f5f7; --ink-dim: #9a9aa8; --ink-faint: #5a5a68;
+        --success: #3ecf6a; --error: #ff5566; --warn: #ffb648;
+        --accent: #c084fc; --accent-2: #f472b6;
+        --radius: 14px;
+    }
+    html, body {
+        background: radial-gradient(circle at top, #1a1a24 0%, #0e0e12 60%);
+        background-attachment: fixed;
+        color: var(--ink);
+        font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 15px; line-height: 1.5;
+        min-height: 100vh;
+    }
+    body {
+        padding: 1.5rem 1rem 6rem;
+        max-width: 900px; margin: 0 auto;
+    }
+    header { margin-bottom: 1.3rem; text-align: center; }
+    h1 {
+        font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.3rem;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        background-clip: text;
+    }
+    .subtitle { font-size: 0.8rem; color: var(--ink-dim); font-style: italic; }
+
+    .toast {
+        position: fixed; top: 1.5rem; left: 50%;
+        transform: translateX(-50%) translateY(-100px);
+        background: var(--panel); color: #fff;
+        border: 1px solid var(--border);
+        padding: 0.85rem 1.4rem; border-radius: 10px;
+        font-size: 0.85rem; font-weight: 500;
+        box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+        z-index: 1000; opacity: 0;
+        transition: transform 0.35s ease, opacity 0.35s ease;
+        max-width: 90vw; text-align: center;
+        pointer-events: none;
+    }
+    .toast.visible { transform: translateX(-50%) translateY(0); opacity: 1; }
+    .toast.success { border-color: var(--success); }
+    .toast.error { border-color: var(--error); }
+    .toast.warn { border-color: var(--warn); }
+
+    .api-panel {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.2rem;
+        margin-bottom: 1rem; transition: border-color 0.3s;
+    }
+    .api-panel.ok { border-color: var(--success); }
+    .api-key-input {
+        width: 100%; padding: 0.85rem 1rem;
+        border-radius: 8px; border: 1px solid var(--border);
+        background: var(--panel-2); color: var(--ink);
+        font-family: ui-monospace, 'SF Mono', Menlo, monospace;
+        font-size: 0.85rem; margin-bottom: 0.6rem;
+    }
+    .api-key-input:focus { outline: none; border-color: var(--accent); }
+    .api-save-btn {
+        width: 100%; padding: 0.8rem 1.2rem;
+        border-radius: 8px; border: none;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #fff; font-size: 0.9rem; font-weight: 700; font-family: inherit;
+        cursor: pointer; margin-bottom: 0.6rem;
+    }
+    .api-save-btn:active { transform: scale(0.98); }
+    .api-status-line {
+        font-size: 0.75rem; padding: 0.55rem 0.85rem;
+        border-radius: 6px; display: flex; align-items: center; gap: 0.5rem;
+        background: var(--panel-2); color: var(--ink-dim);
+    }
+    .api-status-line.ok { color: var(--success); font-weight: 600; }
+    .status-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--ink-faint); flex-shrink: 0;
+    }
+    .api-status-line.ok .status-dot { background: var(--success); }
+    .api-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.4rem; }
+    .api-hint a { color: var(--accent); text-decoration: underline; }
+
+    /* UPLOAD — CORRIGÉ */
+    .upload-zone {
+        border: 2px dashed var(--border); border-radius: var(--radius);
+        padding: 2.5rem 1rem; text-align: center;
+        transition: all 0.2s; margin-bottom: 1rem;
+        background: var(--panel);
+        position: relative;
+        display: block;
+    }
+    .upload-zone:active { border-color: var(--accent); }
+    .upload-zone.has-image { padding: 0.8rem; border-style: solid; }
+    .upload-zone input[type="file"] {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        opacity: 0; cursor: pointer; z-index: 5;
+    }
+    .upload-icon { font-size: 2.4rem; margin-bottom: 0.6rem; opacity: 0.8; pointer-events: none; }
+    .upload-text { font-size: 1rem; color: var(--ink); margin-bottom: 0.3rem; font-weight: 600; pointer-events: none; }
+    .upload-hint { font-size: 0.75rem; color: var(--ink-dim); pointer-events: none; }
+    .upload-preview {
+        position: relative; border-radius: 10px; overflow: hidden;
+        max-width: 260px; margin: 0 auto;
+    }
+    .upload-preview img {
+        width: 100%; display: block; aspect-ratio: 9/16; object-fit: cover;
+    }
+    .change-btn {
+        display: block; margin: 0.7rem auto 0;
+        background: var(--panel-2); color: var(--ink);
+        padding: 0.55rem 1.1rem; border-radius: 20px;
+        font-size: 0.78rem; font-weight: 600;
+        border: 1px solid var(--border); cursor: pointer;
+        font-family: inherit;
+        position: relative; z-index: 10;
+    }
+    .change-btn:active { background: var(--accent); color: #fff; }
+
+    .section {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: var(--radius); margin-bottom: 1rem; overflow: hidden;
+    }
+    .section-header {
+        padding: 0.95rem 1.1rem; cursor: pointer; user-select: none;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .section-header:active { background: var(--panel-2); }
+    .section-title {
+        font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.1em;
+        color: var(--ink-dim); font-weight: 700;
+    }
+    .section-title .badge {
+        display: inline-block; margin-left: 0.4rem; padding: 0.1rem 0.45rem;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #fff; border-radius: 10px;
+        font-size: 0.65rem; letter-spacing: 0;
+    }
+    .section-header .chevron {
+        font-size: 0.7rem; color: var(--ink-faint); transition: transform 0.2s;
+    }
+    .section.open .section-header .chevron { transform: rotate(180deg); }
+    .section-body {
+        max-height: 0; overflow: hidden;
+        transition: max-height 0.35s ease;
+    }
+    .section.open .section-body { max-height: 8000px; }
+    .section-content { padding: 0 1.1rem 1.1rem; }
+
+    /* COUNT — CORRIGÉ */
+    .count-row {
+        display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0;
+    }
+    .count-btn {
+        width: 54px; height: 54px; border-radius: 12px;
+        border: 1px solid var(--border); background: var(--panel-2);
+        color: var(--ink); font-size: 1.6rem; font-weight: 700;
+        cursor: pointer; font-family: inherit; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .count-btn:active { transform: scale(0.93); background: var(--accent); color: #fff; }
+    .count-input {
+        flex: 1; text-align: center;
+        font-size: 1.8rem; font-weight: 800;
+        background: transparent; border: none;
+        color: var(--ink); font-family: inherit;
+        padding: 0.4rem; min-width: 0;
+        -moz-appearance: textfield;
+        width: 100%;
+    }
+    .count-input::-webkit-outer-spin-button,
+    .count-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+    .count-input:focus { outline: none; color: var(--accent); }
+    .count-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.3rem; text-align: center; }
+    .count-presets {
+        display: flex; gap: 0.35rem; justify-content: center;
+        margin-top: 0.6rem; flex-wrap: wrap;
+    }
+    .count-preset {
+        padding: 0.4rem 0.85rem; border-radius: 20px;
+        border: 1px solid var(--border); background: var(--panel-2);
+        font-size: 0.75rem; cursor: pointer; font-family: inherit;
+        color: var(--ink); font-weight: 600;
+    }
+    .count-preset:active { background: var(--accent); color: #fff; }
+
+    .themes-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        gap: 0.5rem;
+    }
+    .theme-card {
+        padding: 0.75rem 0.85rem; border-radius: 10px;
+        border: 1px solid var(--border); background: var(--panel-2);
+        cursor: pointer; transition: all 0.15s;
+        display: flex; align-items: center; gap: 0.55rem;
+    }
+    .theme-card:active { transform: scale(0.98); }
+    .theme-card.selected {
+        border-color: var(--accent);
+        background: linear-gradient(135deg, rgba(192,132,252,0.18), rgba(244,114,182,0.12));
+    }
+    .theme-card .theme-emoji { font-size: 1.3rem; flex-shrink: 0; }
+    .theme-card .theme-name { font-size: 0.82rem; font-weight: 600; line-height: 1.2; }
+    .theme-card .theme-desc { font-size: 0.65rem; opacity: 0.7; margin-top: 0.15rem; }
+
+    textarea, .prompt-main, .voice-text {
+        width: 100%; padding: 0.85rem 1rem;
+        border-radius: 10px; border: 1px solid var(--border);
+        background: var(--panel-2); color: var(--ink);
+        font-family: inherit; font-size: 0.9rem;
+        resize: vertical; line-height: 1.5;
+        display: block;
+    }
+    .prompt-main { min-height: 120px; }
+    .voice-text { min-height: 80px; }
+    .prompt-main:focus, .voice-text:focus { outline: none; border-color: var(--accent); }
+    .prompt-main::placeholder, .voice-text::placeholder { color: var(--ink-faint); }
+    .prompt-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.5rem; line-height: 1.4; }
+    .voice-label {
+        font-size: 0.72rem; color: var(--ink-dim);
+        margin-top: 1rem; margin-bottom: 0.4rem;
+        text-transform: uppercase; letter-spacing: 0.06em; font-weight: 700;
+        display: block;
+    }
+
+    .control-row { margin-bottom: 0.9rem; }
+    .control-row:last-child { margin-bottom: 0; }
+    .control-label {
+        display: block; font-size: 0.72rem; color: var(--ink-dim);
+        margin-bottom: 0.4rem; text-transform: uppercase;
+        letter-spacing: 0.06em; font-weight: 700;
+    }
+    select {
+        width: 100%; padding: 0.75rem 0.9rem; border-radius: 10px;
+        border: 1px solid var(--border); background: var(--panel-2);
+        color: var(--ink); font-family: inherit; font-size: 0.88rem;
+        -webkit-appearance: none; appearance: none;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path fill='%239a9aa8' d='M0 0l5 6 5-6z'/></svg>");
+        background-repeat: no-repeat;
+        background-position: right 0.9rem center;
+        background-size: 10px;
+    }
+    select:focus { outline: none; border-color: var(--accent); }
+
+    .btn-primary {
+        width: 100%; padding: 1.15rem; border-radius: var(--radius);
+        border: none;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #fff; font-size: 1rem; font-weight: 800;
+        font-family: inherit; cursor: pointer;
+        margin-bottom: 1rem; letter-spacing: 0.02em;
+    }
+    .btn-primary:active:not(:disabled) { transform: scale(0.98); }
+    .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+
+    .btn-stop {
+        width: 100%; padding: 0.85rem; border-radius: var(--radius);
+        border: 1px solid var(--error); background: transparent;
+        color: var(--error); font-size: 0.9rem; font-weight: 700;
+        font-family: inherit; cursor: pointer; margin-bottom: 1rem;
+        display: none;
+    }
+    .btn-stop.visible { display: block; }
+
+    .queue { margin-top: 1rem; }
+    .queue-summary {
+        background: var(--panel); border: 1px solid var(--border);
+        border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.6rem;
+        font-size: 0.8rem; display: flex; justify-content: space-between;
+        align-items: center; flex-wrap: wrap; gap: 0.4rem;
+    }
+    .queue-summary .progress-text { font-weight: 700; }
+    .queue-summary .eta-text { color: var(--ink-dim); }
+
+    .queue-item {
+        display: flex; align-items: center; gap: 0.7rem;
+        padding: 0.65rem 0.8rem; border-radius: 8px;
+        border: 1px solid var(--border); margin-bottom: 0.35rem;
+        background: var(--panel); transition: all 0.3s;
+        font-size: 0.8rem;
+    }
+    .queue-item.pending { opacity: 0.55; }
+    .queue-item.creating { border-color: var(--warn); }
+    .queue-item.processing { border-color: var(--accent); }
+    .queue-item.done { border-color: var(--success); }
+    .queue-item.failed { border-color: var(--error); }
+    .queue-item .q-icon { font-size: 1rem; width: 1.4rem; text-align: center; flex-shrink: 0; }
+    .queue-item .q-info { flex: 1; min-width: 0; }
+    .queue-item .q-name {
+        font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .queue-item .q-variant {
+        font-size: 0.68rem; color: var(--ink-dim);
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        margin-top: 0.1rem;
+    }
+    .queue-item .q-status {
+        font-size: 0.7rem; color: var(--ink-dim); text-align: right;
+        flex-shrink: 0; max-width: 40%; overflow: hidden;
+        text-overflow: ellipsis; white-space: nowrap;
+    }
+    .queue-more {
+        text-align: center; padding: 0.5rem; color: var(--ink-dim);
+        font-size: 0.75rem; font-style: italic;
+    }
+
+    .gallery { margin-top: 1.5rem; }
+    .gallery-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.8rem;
+    }
+    .gallery-item {
+        border-radius: var(--radius); overflow: hidden;
+        border: 1px solid var(--border); background: #000;
+        animation: fadeIn 0.5s ease;
+    }
+    .gallery-item video {
+        width: 100%; display: block; aspect-ratio: 9/16; object-fit: cover;
+    }
+    .gallery-item .g-caption {
+        padding: 0.5rem 0.7rem; background: var(--panel);
+        font-size: 0.7rem; color: var(--ink-dim);
+        border-top: 1px solid var(--border);
+    }
+    .gallery-item .g-caption strong { color: var(--ink); display: block; font-size: 0.75rem; }
+
+    .status-bar {
+        position: fixed; bottom: 0; left: 0; right: 0;
+        background: linear-gradient(90deg, var(--accent), var(--accent-2));
+        color: #fff; padding: 0.85rem 1rem;
+        font-size: 0.8rem; font-weight: 600;
+        display: flex; align-items: center; gap: 0.6rem;
+        transform: translateY(100%); transition: transform 0.35s;
+        z-index: 100;
+    }
+    .status-bar.visible { transform: translateY(0); }
+    .status-bar .spinner {
+        width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.35);
+        border-top-color: #fff; border-radius: 50%;
+        animation: spin 0.8s linear infinite; flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    #noSleepCanvas, #noSleepVideo {
+        position: fixed; top: 0; left: 0; width: 1px; height: 1px;
+        opacity: 0.01; pointer-events: none; z-index: -1;
+    }
+</style>
+</head>
+<body>
+
+<header>
+    <h1>Multi-Visions</h1>
+    <p class="subtitle">Une seule photo. Des dizaines de vidéos uniques.</p>
+</header>
+
+<!-- CLÉ API -->
+<div class="api-panel" id="api-panel">
+    <input type="password" class="api-key-input" id="api-key-input"
+           placeholder="Collez votre clé API ici (sk-...)" autocomplete="off" spellcheck="false">
+    <button type="button" class="api-save-btn" id="api-save-btn">Enregistrer la clé</button>
+    <div class="api-status-line" id="api-status-line">
+        <span class="status-dot"></span>
+        <span id="api-status-text">Aucune clé API enregistrée</span>
+    </div>
+    <div class="api-hint">
+        Clé gratuite sur <a href="https://platform.agnes-ai.com" target="_blank">platform.agnes-ai.com</a> → Settings → API Keys
+    </div>
+</div>
+
+<!-- UPLOAD PHOTO -->
+<label class="upload-zone" id="upload-zone" for="file-input">
+    <input type="file" id="file-input" accept="image/*">
+    <div id="upload-default">
+        <div class="upload-icon">📷</div>
+        <div class="upload-text">Appuyez pour choisir votre photo</div>
+        <div class="upload-hint">Une seule image suffit pour générer des dizaines de vidéos</div>
+    </div>
+    <div id="upload-preview-wrap" style="display:none;">
+        <div class="upload-preview">
+            <img id="upload-preview-img" alt="">
+        </div>
+        <div class="change-btn" id="change-image-btn">Changer la photo</div>
+    </div>
+</label>
+
+<!-- NOMBRE DE VARIANTES -->
+<div class="section open" id="section-count">
+    <div class="section-header" data-toggle="section-count">
+        <span class="section-title">🎯 Nombre de variantes</span>
+        <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+        <div class="section-content">
+            <div class="count-row">
+                <button type="button" class="count-btn" id="count-minus">−</button>
+                <input type="number" class="count-input" id="count-input"
+                       value="5" min="1" max="50" inputmode="numeric">
+                <button type="button" class="count-btn" id="count-plus">+</button>
+            </div>
+            <div class="count-presets">
+                <div class="count-preset" data-count="1">1</div>
+                <div class="count-preset" data-count="3">3</div>
+                <div class="count-preset" data-count="5">5</div>
+                <div class="count-preset" data-count="10">10</div>
+                <div class="count-preset" data-count="20">20</div>
+                <div class="count-preset" data-count="30">30</div>
+            </div>
+            <div class="count-hint">Chaque variante = un style + mouvement + lumière + action uniques</div>
+        </div>
+    </div>
+</div>
+
+<!-- THÈME DIRECTEUR -->
+<div class="section open" id="section-theme">
+    <div class="section-header" data-toggle="section-theme">
+        <span class="section-title">🎨 Thème directeur <span class="badge">recommandé</span></span>
+        <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+        <div class="section-content">
+            <div class="themes-grid" id="themes-grid"></div>
+        </div>
+    </div>
+</div>
+
+<!-- DESCRIPTION & CONTEXTE -->
+<div class="section open" id="section-prompt">
+    <div class="section-header" data-toggle="section-prompt">
+        <span class="section-title">✍️ Description & contexte <span class="badge">recommandé</span></span>
+        <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+        <div class="section-content">
+            <label class="control-label">Décrivez la scène, le contexte, l'ambiance</label>
+            <textarea class="prompt-main" id="main-prompt"
+                placeholder="Par exemple : « Le personnage se tient debout dans un champ au coucher du soleil. Un vent léger fait bouger ses cheveux. La lumière est chaude et dorée. Garde le sujet exactement identique à la photo originale. »"></textarea>
+            <div class="prompt-hint">
+                💡 Ce prompt s'applique à <strong>toutes</strong> les variantes. Laissez vide pour laisser l'application tout décider.
+            </div>
+
+            <label class="voice-label">🎙️ Texte lu par le personnage (optionnel)</label>
+            <textarea class="voice-text" id="voice-text"
+                placeholder="Entrez le texte que le personnage est censé prononcer. Par exemple : « Bonjour, je m'appelle Sophie. Bienvenue dans mon univers. »
+
+Le texte sera transmis à l'IA pour qu'elle adapte la posture, le regard et le mouvement de bouche. (L'API actuelle ne génère pas de son réel.)"></textarea>
+
+            <div class="control-row" style="margin-top:1rem;">
+                <label class="control-label">Voix / attitude vocale</label>
+                <select id="voice-style-select">
+                    <option value="none">Aucune voix (personnage silencieux)</option>
+                    <option value="neutral">Neutre — parle calmement</option>
+                    <option value="female">Féminine — voix douce et claire</option>
+                    <option value="male">Masculine — voix grave et posée</option>
+                    <option value="whisper">Chuchotement — très discret</option>
+                    <option value="dramatic">Dramatique — intensité théâtrale</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- RÉGLAGES TECHNIQUES -->
+<div class="section" id="section-tech">
+    <div class="section-header" data-toggle="section-tech">
+        <span class="section-title">📷 Réglages techniques</span>
+        <span class="chevron">▼</span>
+    </div>
+    <div class="section-body">
+        <div class="section-content">
+            <div class="control-row">
+                <label class="control-label">Durée de chaque vidéo</label>
+                <select id="duration-select">
+                    <option value="121">5 secondes</option>
+                    <option value="153" selected>6,4 secondes (recommandé)</option>
+                    <option value="241">10 secondes</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <label class="control-label">Intensité du mouvement</label>
+                <select id="intensity-select">
+                    <option value="random" selected>Varier entre les vidéos (recommandé)</option>
+                    <option value="subtle">Toutes subtiles</option>
+                    <option value="moderate">Toutes modérées</option>
+                    <option value="strong">Toutes fortes</option>
+                </select>
+            </div>
+            <div class="control-row">
+                <label class="control-label">Pause entre chaque création</label>
+                <select id="interval-select">
+                    <option value="75000" selected>75 secondes (sûr)</option>
+                    <option value="62000">62 secondes (rapide)</option>
+                    <option value="90000">90 secondes (très sûr)</option>
+                </select>
+            </div>
+        </div>
+    </div>
+</div>
+
+<button type="button" class="btn-primary" id="generate-btn" disabled>
+    Ajoutez d'abord une photo
+</button>
+
+<button type="button" class="btn-stop" id="stop-btn">
+    ⏹ Arrêter la génération
+</button>
+
+<div class="queue" id="queue" style="display:none;"></div>
+
+<div class="gallery" id="gallery" style="display:none;">
+    <div class="section-title" style="margin-bottom:0.8rem;">🎬 Vidéos générées</div>
+    <div class="gallery-grid" id="gallery-grid"></div>
+</div>
+
+<div class="status-bar" id="status-bar">
+    <div class="spinner"></div>
+    <span id="status-text">Préparation…</span>
+</div>
+
+<div class="toast" id="toast">
+    <span id="toast-text">Message</span>
+</div>
+
+<canvas id="noSleepCanvas" width="2" height="2"></canvas>
+<video id="noSleepVideo" playsinline muted loop></video>
+
+<script>
+// ══════════════════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════════════════
+const API_BASE = 'https://apihub.agnes-ai.com/v1';
+const POLL_BASE = 'https://apihub.agnes-ai.com/agnesapi';
+const MODEL_VIDEO = 'agnes-video-v2.0';
+const FRAME_RATE = 24;
+const VIDEO_WIDTH = 768;
+const VIDEO_HEIGHT = 1152; // portrait 9:16, matches the app's preview/gallery aspect ratio
+
+const POLL_INTERVAL_SEC = 8;
+const MAX_POLL_ATTEMPTS = 120;
+
+const API_KEY_STORAGE = 'agnes_api_key_mv';
+const TIMING_CACHE_KEY = 'agnes_timing_mv_v1';
+
+const MAX_VISIBLE_QUEUE = 40;
+const MAX_IMAGE_SIZE = 12 * 1024 * 1024;
+const THUMBNAIL_MAX_WIDTH = 400;
+const FULL_IMAGE_MAX_WIDTH = 1600;
+
+const NEGATIVE_PROMPT = 'blurry, distorted face, extra limbs, warped anatomy, watermark, text overlay, low quality';
+
+// ══════════════════════════════════════════════════════════════════
+// ÉTAT GLOBAL
+// ══════════════════════════════════════════════════════════════════
+const state = {
+    image: null,
+    imageThumb: null,
+    imageName: '',
+    variantCount: 5,
+    selectedTheme: null,
+    mainPrompt: '',
+    voiceText: '',
+    voiceStyle: 'none',
+    durationFrames: 153,
+    intensity: 'random',
+    intervalMs: 75000,
+    isRunning: false,
+    stopRequested: false,
+    queue: [],
+    completed: 0,
+    failed: 0,
+    activeTimers: []
+};
+
+// ══════════════════════════════════════════════════════════════════
+// TOAST
+// ══════════════════════════════════════════════════════════════════
+let toastTimeout = null;
+function showToast(message, type, duration) {
+    type = type || 'success';
+    duration = duration || 2500;
+    const toast = document.getElementById('toast');
+    const text = document.getElementById('toast-text');
+    if (!toast || !text) return;
+    toast.classList.remove('visible', 'success', 'error', 'warn');
+    void toast.offsetWidth;
+    const icons = { success: '✓ ', error: '✕ ', warn: '⚠ ' };
+    text.textContent = (icons[type] || '') + message;
+    toast.classList.add(type);
+    requestAnimationFrame(function() { toast.classList.add('visible'); });
+    if (toastTimeout) clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(function() { toast.classList.remove('visible'); }, duration);
+}
+
+// ══════════════════════════════════════════════════════════════════
+// WAKE LOCK (anti-veille)
+// ══════════════════════════════════════════════════════════════════
+let wakeLockSentinel = null;
+let canvasStream = null;
+let canvasInterval = null;
+
+function isWakeLockSupported() {
+    return 'wakeLock' in navigator && typeof navigator.wakeLock.request === 'function';
+}
+async function requestWakeLockAPI() {
+    if (!isWakeLockSupported()) return false;
+    try {
+        wakeLockSentinel = await navigator.wakeLock.request('screen');
+        wakeLockSentinel.addEventListener('release', function() { wakeLockSentinel = null; });
+        return true;
+    } catch (e) { return false; }
+}
+async function releaseWakeLockAPI() {
+    if (wakeLockSentinel) {
+        try { await wakeLockSentinel.release(); } catch (e) {}
+        wakeLockSentinel = null;
+    }
+}
+function startCanvasStream() {
+    if (canvasStream) return true;
+    try {
+        const canvas = document.getElementById('noSleepCanvas');
+        const video = document.getElementById('noSleepVideo');
+        if (!canvas || !video) return false;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#000'; ctx.fillRect(0, 0, 2, 2);
+        if (typeof canvas.captureStream !== 'function') return false;
+        canvasStream = canvas.captureStream(1);
+        let toggle = false;
+        canvasInterval = setInterval(function() {
+            toggle = !toggle;
+            ctx.fillStyle = toggle ? '#000000' : '#010101';
+            ctx.fillRect(0, 0, 2, 2);
+        }, 1000);
+        video.srcObject = canvasStream;
+        video.muted = true;
+        video.play().catch(function() {});
+        return true;
+    } catch (e) { return false; }
+}
+function stopCanvasStream() {
+    if (canvasInterval) { clearInterval(canvasInterval); canvasInterval = null; }
+    const video = document.getElementById('noSleepVideo');
+    if (video) { try { video.pause(); video.srcObject = null; } catch (e) {} }
+    if (canvasStream) { try { canvasStream.getTracks().forEach(function(t){ t.stop(); }); } catch (e) {} canvasStream = null; }
+}
+async function ensureWakeLockActive() {
+    if (wakeLockSentinel || canvasStream) return;
+    let ok = false;
+    if (isWakeLockSupported()) ok = await requestWakeLockAPI();
+    if (!ok) startCanvasStream();
+}
+function releaseWakeLockAndCanvas() {
+    releaseWakeLockAPI();
+    stopCanvasStream();
+}
+document.addEventListener('visibilitychange', function() {
+    if (document.visibilityState === 'visible' && state.isRunning) ensureWakeLockActive();
+});
+
+// ══════════════════════════════════════════════════════════════════
+// TIMING CACHE (estimation de la durée par nombre de frames)
+// ══════════════════════════════════════════════════════════════════
+function loadTimingCache() {
+    try { return JSON.parse(localStorage.getItem(TIMING_CACHE_KEY) || '{}'); }
+    catch (e) { return {}; }
+}
+function saveTimingCache(c) {
+    try { localStorage.setItem(TIMING_CACHE_KEY, JSON.stringify(c)); } catch (e) {}
+}
+function recordTiming(numFrames, ms) {
+    const cache = loadTimingCache();
+    const k = String(numFrames);
+    if (!cache[k]) cache[k] = [];
+    cache[k].push(ms);
+    if (cache[k].length > 10) cache[k] = cache[k].slice(-10);
+    saveTimingCache(cache);
+}
+function estimateTiming(numFrames) {
+    const cache = loadTimingCache();
+    const s = cache[String(numFrames)];
+    if (s && s.length) {
+        const sorted = s.slice().sort(function(a, b) { return a - b; });
+        const mid = Math.floor(sorted.length / 2);
+        return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+    }
+    return 30000 + numFrames * 500;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// THÈMES DIRECTEURS — chaque thème biaise les choix aléatoires
+// ══════════════════════════════════════════════════════════════════
+const THEMES = [
+    { id: 'cinema', name: 'Cinématique', emoji: '🎬', desc: 'Ambiance film, lumière dramatique',
+      ambianceEffects: ['cinematic', 'dramatic-contrast', 'chiaroscuro', 'moonlight'],
+      actions: ['the subject slowly raises a hand toward the camera', 'the subject turns their head slowly', 'the subject stands still, chest rising and falling'],
+      cameras: ['slow dolly-in', 'static locked-off frame', 'rack focus from foreground to subject', 'subtle parallax movement'],
+      lightings: ['cinematic rim lighting', 'dramatic side lighting with deep shadows', 'warm golden hour backlight'] },
+
+    { id: 'kungfu', name: 'Kung-Fu', emoji: '🥋', desc: 'Arts martiaux, sauts, ralenti',
+      ambianceEffects: ['cinematic', 'dramatic-contrast', 'golden-hour'],
+      actions: ['the subject performs a slow martial arts stance, weight shifting', 'the subject strikes the air with controlled precision, sleeve fluttering', 'the subject leaps slowly through the air, robe flowing behind', 'the subject blocks an invisible attack, both arms raised'],
+      cameras: ['slow pan following the movement', 'low angle looking up', 'handheld, slight tremor', 'slow dolly-in'],
+      lightings: ['dramatic side lighting with deep shadows', 'warm golden hour backlight', 'soft diffused natural light'] },
+
+    { id: 'hiphop', name: 'Hip-Hop', emoji: '🎤', desc: 'Danse urbaine, néons, attitude',
+      ambianceEffects: ['neon-urban', 'vintage-super8', 'dramatic-contrast'],
+      actions: ['the subject pops and locks, shoulders rolling', 'the subject freezes mid-move then snaps back', 'the subject walks toward the camera with confident b-boy swagger', 'the subject spins and drops into a freeze pose'],
+      cameras: ['handheld, slight tremor', 'slow dolly-in', 'whip-pan reveal', 'low angle looking up'],
+      lightings: ['neon-soaked glow', 'cool moonlight atmosphere', 'warm interior candlelight flicker'] },
+
+    { id: 'danse', name: 'Danse', emoji: '💃', desc: 'Grâce, mouvement fluide',
+      ambianceEffects: ['pastel-dream', 'golden-hour', 'cinematic'],
+      actions: ['the subject spins slowly, hair and fabric flowing outward', 'the subject extends one arm gracefully while turning', 'the subject performs a slow contemporary dance movement, arms flowing', 'the subject sways gently side to side, eyes closed'],
+      cameras: ['slow orbit around the subject', 'static locked-off frame', 'slow dolly-in', 'low angle looking up'],
+      lightings: ['soft diffused natural light', 'warm golden hour backlight', 'pastel dreamy glow'] },
+
+    { id: 'romance', name: 'Romance', emoji: '💕', desc: 'Douceur, regards, tendresse',
+      ambianceEffects: ['golden-hour', 'pastel-dream', 'cinematic'],
+      actions: ['the subject smiles softly and looks toward the camera', 'the subject brushes hair behind their ear with a gentle smile', 'the subject looks down bashfully then looks up smiling', 'the subject gently tilts their head, eyes soft'],
+      cameras: ['slow dolly-in', 'static locked-off frame', 'subtle parallax movement'],
+      lightings: ['warm golden hour backlight', 'soft diffused natural light', 'warm interior candlelight flicker'] },
+
+    { id: 'mystere', name: 'Mystère', emoji: '🕯️', desc: 'Ombres, tension, secret',
+      ambianceEffects: ['chiaroscuro', 'dramatic-contrast', 'moonlight'],
+      actions: ['the subject slowly turns their head toward the shadows', 'the subject glances over their shoulder, wary', 'the subject stands motionless, eyes scanning slowly', 'the subject takes one slow step forward into the light'],
+      cameras: ['slow dolly-in', 'handheld, slight tremor', 'rack focus from foreground to subject', 'low angle looking up'],
+      lightings: ['dramatic side lighting with deep shadows', 'cool moonlight atmosphere', 'chiaroscuro single-source light'] },
+
+    { id: 'sport', name: 'Sport', emoji: '🏃', desc: 'Énergie, effort, mouvement',
+      ambianceEffects: ['dramatic-contrast', 'golden-hour', 'neon-urban'],
+      actions: ['the subject sprints in place, muscles tensing', 'the subject throws a powerful punch toward the camera', 'the subject jumps and lands in an athletic stance', 'the subject wipes sweat from their brow, breathing hard'],
+      cameras: ['handheld, slight tremor', 'low angle looking up', 'slow dolly-in', 'whip-pan reveal'],
+      lightings: ['dramatic side lighting with deep shadows', 'warm golden hour backlight', 'cool stadium floodlight'] },
+
+    { id: 'nature', name: 'Nature', emoji: '🌿', desc: 'Plein air, vent, calme',
+      ambianceEffects: ['golden-hour', 'pastel-dream', 'soft-focus'],
+      actions: ['the subject closes their eyes, wind gently moving their hair', 'the subject looks up toward the sky, breathing slowly', 'the subject reaches a hand out as if touching the wind', 'the subject walks slowly forward through tall grass'],
+      cameras: ['slow dolly-in', 'subtle parallax movement', 'static locked-off frame', 'slow orbit around the subject'],
+      lightings: ['warm golden hour backlight', 'soft diffused natural light', 'soft overcast light'] }
+];
+
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+
+function pickThemeForVariant() {
+    if (state.selectedTheme) {
+        const t = THEMES.find(function(x) { return x.id === state.selectedTheme; });
+        if (t) return t;
+    }
+    return THEMES[Math.floor(Math.random() * THEMES.length)];
+}
+
+const INTENSITY_TEXT = {
+    subtle: 'very subtle, minimal movement',
+    moderate: 'moderate, natural movement',
+    strong: 'strong, dynamic movement'
+};
+const VOICE_STYLE_TEXT = {
+    neutral: 'a calm, neutral tone',
+    female: 'a soft, clear feminine voice',
+    male: 'a deep, composed masculine voice',
+    whisper: 'a hushed whisper',
+    dramatic: 'an intense, theatrical delivery'
+};
+
+function buildVariantPrompt() {
+    const themeObj = pickThemeForVariant();
+    const action = pick(themeObj.actions);
+    const camera = pick(themeObj.cameras);
+    const lighting = pick(themeObj.lightings);
+    const ambiance = pick(themeObj.ambianceEffects);
+    let intensity = state.intensity;
+    if (intensity === 'random') intensity = pick(['subtle', 'moderate', 'strong']);
+
+    const parts = [];
+    parts.push(action + '.');
+    parts.push('Camera: ' + camera + '.');
+    parts.push('Lighting: ' + lighting + ', ' + ambiance + ' atmosphere.');
+    parts.push('Movement intensity: ' + INTENSITY_TEXT[intensity] + '.');
+    if (state.mainPrompt && state.mainPrompt.trim()) {
+        parts.push(state.mainPrompt.trim());
+    }
+    if (state.voiceStyle !== 'none' && state.voiceText && state.voiceText.trim()) {
+        parts.push('The subject appears to be speaking, mouth movements and expression matching ' +
+            (VOICE_STYLE_TEXT[state.voiceStyle] || 'a natural tone') + ', saying: "' + state.voiceText.trim() + '".');
+    }
+    parts.push("Keep the subject's face, body and identity exactly consistent with the reference photo.");
+
+    return {
+        promptText: parts.join(' '),
+        meta: { themeName: themeObj.name, themeEmoji: themeObj.emoji, action: action, camera: camera, lighting: lighting, intensity: intensity }
+    };
+}
+
+// ══════════════════════════════════════════════════════════════════
+// APPEL API
+// ══════════════════════════════════════════════════════════════════
+function ApiKeyError(message) {
+    this.name = 'ApiKeyError';
+    this.message = message;
+}
+ApiKeyError.prototype = Object.create(Error.prototype);
+
+function delay(ms) {
+    return new Promise(function(resolve) {
+        const t = setTimeout(resolve, ms);
+        state.activeTimers.push(t);
+    });
+}
+
+async function apiFetch(path, options, base) {
+    const key = localStorage.getItem(API_KEY_STORAGE);
+    const url = (base || API_BASE) + path;
+    const headers = Object.assign({ 'Authorization': 'Bearer ' + key }, (options && options.headers) || {});
+    return fetch(url, Object.assign({}, options, { headers: headers }));
+}
+
+async function parseErrorMessage(res) {
+    try {
+        const j = await res.json();
+        return (j.error && (j.error.message || j.error)) || j.message || ('Erreur ' + res.status);
+    } catch (e) {
+        return 'Erreur ' + res.status + (res.statusText ? ' (' + res.statusText + ')' : '');
+    }
+}
+
+async function createVideoTask(item) {
+    const body = {
+        model: MODEL_VIDEO,
+        prompt: item.promptText,
+        image: state.image,
+        width: VIDEO_WIDTH,
+        height: VIDEO_HEIGHT,
+        num_frames: state.durationFrames,
+        frame_rate: FRAME_RATE,
+        negative_prompt: NEGATIVE_PROMPT
+    };
+    let attempt = 0;
+    for (;;) {
+        const res = await apiFetch('/videos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        if (res.status === 429 && attempt < 3) {
+            attempt++;
+            await delay(5000 * Math.pow(2, attempt));
+            continue;
+        }
+        if (res.status === 401 || res.status === 403) {
+            throw new ApiKeyError(await parseErrorMessage(res));
+        }
+        if (!res.ok) {
+            throw new Error(await parseErrorMessage(res));
+        }
+        return res.json();
+    }
+}
+
+async function pollVideo(videoId) {
+    for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
+        if (state.stopRequested) return { status: 'stopped' };
+        await delay(POLL_INTERVAL_SEC * 1000);
+        if (state.stopRequested) return { status: 'stopped' };
+        const res = await apiFetch('?video_id=' + encodeURIComponent(videoId), { method: 'GET' }, POLL_BASE);
+        if (res.status === 401 || res.status === 403) throw new ApiKeyError(await parseErrorMessage(res));
+        if (!res.ok) continue; // erreur transitoire, on retente au prochain cycle
+        const json = await res.json();
+        if (json.status === 'completed' || json.status === 'failed') return json;
+        if (typeof json.progress === 'number') updateItemProgress(videoId, json.progress);
+    }
+    return { status: 'timeout' };
+}
+
+function updateItemProgress(videoId, progress) {
+    const item = state.queue.find(function(q) { return q.videoId === videoId; });
+    if (item) item.progressPct = progress;
+    const el = document.getElementById('status-text');
+    if (el) el.textContent = 'Traitement… ' + progress + '%';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// GÉNÉRATION
+// ══════════════════════════════════════════════════════════════════
+async function runGeneration() {
+    if (!state.image) { showToast("Ajoutez une photo d'abord", 'error'); return; }
+    if (!localStorage.getItem(API_KEY_STORAGE)) { showToast("Ajoutez votre clé API d'abord", 'error'); return; }
+    if (state.isRunning) return;
+
+    state.isRunning = true;
+    state.stopRequested = false;
+    state.completed = 0;
+    state.failed = 0;
+    state.queue = [];
+    const n = state.variantCount;
+    for (let i = 0; i < n; i++) {
+        const built = buildVariantPrompt();
+        state.queue.push({
+            index: i + 1, status: 'pending', promptText: built.promptText, meta: built.meta,
+            videoId: null, videoUrl: null, error: null
+        });
+    }
+
+    const generateBtn = document.getElementById('generate-btn');
+    generateBtn.disabled = true;
+    generateBtn.textContent = 'Génération en cours…';
+    document.getElementById('stop-btn').classList.add('visible');
+    document.getElementById('queue').style.display = 'block';
+    await ensureWakeLockActive();
+    renderQueue();
+    updateStatusBar(true, 'Préparation…');
+
+    for (let i = 0; i < state.queue.length; i++) {
+        if (state.stopRequested) break;
+        const item = state.queue[i];
+        item.status = 'creating';
+        renderQueue();
+        updateStatusBar(true, 'Création de la vidéo ' + item.index + '/' + n + '…');
+        const startTime = Date.now();
+        try {
+            const created = await createVideoTask(item);
+            item.videoId = created.video_id || created.id || created.task_id;
+            item.status = 'processing';
+            renderQueue();
+            updateStatusBar(true, 'Traitement de la vidéo ' + item.index + '/' + n + '…');
+
+            const result = await pollVideo(item.videoId);
+            if (state.stopRequested || result.status === 'stopped') {
+                item.status = 'pending';
+                break;
+            }
+            if (result.status === 'completed' && result.metadata && result.metadata.url) {
+                item.videoUrl = result.metadata.url;
+                item.status = 'done';
+                state.completed++;
+                recordTiming(state.durationFrames, Date.now() - startTime);
+            } else {
+                item.status = 'failed';
+                item.error = (result.error && (result.error.message || result.error)) ||
+                    (result.status === 'timeout' ? 'Délai dépassé' : 'Échec de génération');
+                state.failed++;
+            }
+        } catch (e) {
+            item.status = 'failed';
+            item.error = e.message || 'Erreur inconnue';
+            state.failed++;
+            if (e instanceof ApiKeyError) {
+                showToast('Clé API invalide ou expirée — arrêt de la génération', 'error', 4000);
+                for (let j = i + 1; j < state.queue.length; j++) {
+                    state.queue[j].status = 'failed';
+                    state.queue[j].error = 'Clé API invalide';
+                }
+                renderQueue();
+                break;
+            }
+        }
+        renderQueue();
+        renderGallery();
+        if (i < state.queue.length - 1 && !state.stopRequested) {
+            updateStatusBar(true, 'Pause avant la prochaine création… (' + Math.round(state.intervalMs / 1000) + 's)');
+            await delay(state.intervalMs);
+        }
+    }
+
+    state.isRunning = false;
+    document.getElementById('stop-btn').classList.remove('visible');
+    releaseWakeLockAndCanvas();
+    updateStatusBar(false);
+    updateGenerateButtonState();
+
+    if (state.stopRequested) {
+        showToast('Génération arrêtée — ' + state.completed + ' vidéo(s) créée(s)', 'warn');
+    } else {
+        showToast(state.completed + ' vidéo(s) créée(s), ' + state.failed + ' échec(s)', state.failed ? 'warn' : 'success', 4000);
+    }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// AFFICHAGE : FILE D'ATTENTE & GALERIE
+// ══════════════════════════════════════════════════════════════════
+const STATUS_ICON = { pending: '⏳', creating: '🎬', processing: '⚙️', done: '✅', failed: '❌' };
+function statusLabel(item) {
+    if (item.status === 'creating') return 'Création…';
+    if (item.status === 'processing') return (item.progressPct != null ? item.progressPct + '%' : 'Traitement…');
+    if (item.status === 'done') return 'Terminée';
+    if (item.status === 'failed') return item.error || 'Échec';
+    return 'En attente';
+}
+
+function renderQueue() {
+    const el = document.getElementById('queue');
+    const total = state.queue.length;
+    const done = state.queue.filter(function(q) { return q.status === 'done'; }).length;
+    const failed = state.queue.filter(function(q) { return q.status === 'failed'; }).length;
+    const remaining = total - done - failed;
+    const etaMs = estimateTiming(state.durationFrames) * remaining + Math.max(0, remaining - 1) * state.intervalMs;
+    const etaMin = Math.max(0, Math.round(etaMs / 60000));
+
+    let html = '<div class="queue-summary">' +
+        '<span class="progress-text">' + (done + failed) + '/' + total + ' traitées</span>' +
+        '<span class="eta-text">' + (remaining > 0 ? 'Environ ' + etaMin + ' min restantes' : 'Terminé') + '</span>' +
+        '</div>';
+
+    state.queue.slice(0, MAX_VISIBLE_QUEUE).forEach(function(item) {
+        const shortAction = item.meta.action.length > 60 ? item.meta.action.slice(0, 60) + '…' : item.meta.action;
+        html += '<div class="queue-item ' + item.status + '">' +
+            '<div class="q-icon">' + (STATUS_ICON[item.status] || '⏳') + '</div>' +
+            '<div class="q-info">' +
+            '<div class="q-name">Variante ' + item.index + ' — ' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</div>' +
+            '<div class="q-variant">' + shortAction + '</div>' +
+            '</div>' +
+            '<div class="q-status">' + statusLabel(item) + '</div>' +
+            '</div>';
+    });
+    if (total > MAX_VISIBLE_QUEUE) {
+        html += '<div class="queue-more">+ ' + (total - MAX_VISIBLE_QUEUE) + ' autres variantes</div>';
+    }
+    el.innerHTML = html;
+}
+
+function renderGallery() {
+    const gallery = document.getElementById('gallery');
+    const grid = document.getElementById('gallery-grid');
+    const doneItems = state.queue.filter(function(q) { return q.status === 'done'; });
+    if (!doneItems.length) { gallery.style.display = 'none'; return; }
+    gallery.style.display = 'block';
+    grid.innerHTML = doneItems.map(function(item) {
+        return '<div class="gallery-item">' +
+            '<video src="' + item.videoUrl + '" controls loop muted playsinline preload="metadata"></video>' +
+            '<div class="g-caption"><strong>' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</strong>' + item.meta.camera + '</div>' +
+            '</div>';
+    }).join('');
+}
+
+function updateStatusBar(visible, text) {
+    const bar = document.getElementById('status-bar');
+    if (visible) {
+        bar.classList.add('visible');
+        if (text) document.getElementById('status-text').textContent = text;
+    } else {
+        bar.classList.remove('visible');
+    }
+}
+
+function updateGenerateButtonState() {
+    const btn = document.getElementById('generate-btn');
+    if (state.isRunning) return;
+    const hasKey = !!localStorage.getItem(API_KEY_STORAGE);
+    if (!state.image) { btn.disabled = true; btn.textContent = "Ajoutez d'abord une photo"; return; }
+    if (!hasKey) { btn.disabled = true; btn.textContent = 'Ajoutez votre clé API'; return; }
+    btn.disabled = false;
+    btn.textContent = 'Lancer la génération';
+}
+
+// ══════════════════════════════════════════════════════════════════
+// UPLOAD PHOTO (lecture + redimensionnement client-side)
+// ══════════════════════════════════════════════════════════════════
+function readAndResizeImage(file) {
+    return new Promise(function(resolve, reject) {
+        const reader = new FileReader();
+        reader.onerror = function() { reject(new Error('Lecture du fichier impossible')); };
+        reader.onload = function() {
+            const img = new Image();
+            img.onerror = function() { reject(new Error('Image invalide')); };
+            img.onload = function() {
+                function makeDataUrl(maxDim) {
+                    let width = img.width, height = img.height;
+                    if (width > height && width > maxDim) { height = Math.round(height * maxDim / width); width = maxDim; }
+                    else if (height >= width && height > maxDim) { width = Math.round(width * maxDim / height); height = maxDim; }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width; canvas.height = height;
+                    canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    return canvas.toDataURL('image/jpeg', 0.9);
+                }
+                resolve({ full: makeDataUrl(FULL_IMAGE_MAX_WIDTH), thumb: makeDataUrl(THUMBNAIL_MAX_WIDTH) });
+            };
+            img.src = reader.result;
+        };
+        reader.readAsDataURL(file);
+    });
+}
+
+document.getElementById('file-input').addEventListener('change', async function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!file.type.startsWith('image/')) { showToast('Fichier non supporté', 'error'); return; }
+    if (file.size > MAX_IMAGE_SIZE) { showToast('Image trop lourde (max 12 Mo)', 'error'); return; }
+    try {
+        const resized = await readAndResizeImage(file);
+        state.image = resized.full;
+        state.imageThumb = resized.thumb;
+        state.imageName = file.name;
+        document.getElementById('upload-preview-img').src = resized.thumb;
+        document.getElementById('upload-default').style.display = 'none';
+        document.getElementById('upload-preview-wrap').style.display = 'block';
+        document.getElementById('upload-zone').classList.add('has-image');
+        updateGenerateButtonState();
+        showToast('Photo ajoutée', 'success');
+    } catch (err) {
+        showToast(err.message || "Erreur de lecture de l'image", 'error');
+    }
+});
+
+// ══════════════════════════════════════════════════════════════════
+// SECTIONS PLIABLES
+// ══════════════════════════════════════════════════════════════════
+document.querySelectorAll('[data-toggle]').forEach(function(header) {
+    header.addEventListener('click', function() {
+        document.getElementById(header.getAttribute('data-toggle')).classList.toggle('open');
+    });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// NOMBRE DE VARIANTES
+// ══════════════════════════════════════════════════════════════════
+const countInput = document.getElementById('count-input');
+function setCount(n) {
+    n = Math.max(1, Math.min(50, Math.round(n) || 1));
+    state.variantCount = n;
+    countInput.value = n;
+}
+document.getElementById('count-minus').addEventListener('click', function() { setCount(state.variantCount - 1); });
+document.getElementById('count-plus').addEventListener('click', function() { setCount(state.variantCount + 1); });
+countInput.addEventListener('change', function() { setCount(parseInt(countInput.value, 10)); });
+document.querySelectorAll('.count-preset').forEach(function(p) {
+    p.addEventListener('click', function() { setCount(parseInt(p.getAttribute('data-count'), 10)); });
+});
+
+// ══════════════════════════════════════════════════════════════════
+// THÈMES
+// ══════════════════════════════════════════════════════════════════
+function renderThemes() {
+    const grid = document.getElementById('themes-grid');
+    grid.innerHTML = THEMES.map(function(t) {
+        return '<div class="theme-card" data-theme="' + t.id + '">' +
+            '<div class="theme-emoji">' + t.emoji + '</div>' +
+            '<div><div class="theme-name">' + t.name + '</div><div class="theme-desc">' + t.desc + '</div></div>' +
+            '</div>';
+    }).join('');
+    grid.querySelectorAll('.theme-card').forEach(function(card) {
+        card.addEventListener('click', function() {
+            const id = card.getAttribute('data-theme');
+            if (state.selectedTheme === id) {
+                state.selectedTheme = null;
+                card.classList.remove('selected');
+            } else {
+                grid.querySelectorAll('.theme-card').forEach(function(c) { c.classList.remove('selected'); });
+                state.selectedTheme = id;
+                card.classList.add('selected');
+            }
+        });
+    });
+}
+renderThemes();
+
+// ══════════════════════════════════════════════════════════════════
+// PROMPT, VOIX, RÉGLAGES TECHNIQUES
+// ══════════════════════════════════════════════════════════════════
+document.getElementById('main-prompt').addEventListener('input', function(e) { state.mainPrompt = e.target.value; });
+document.getElementById('voice-text').addEventListener('input', function(e) { state.voiceText = e.target.value; });
+document.getElementById('voice-style-select').addEventListener('change', function(e) { state.voiceStyle = e.target.value; });
+document.getElementById('duration-select').addEventListener('change', function(e) { state.durationFrames = parseInt(e.target.value, 10); });
+document.getElementById('intensity-select').addEventListener('change', function(e) { state.intensity = e.target.value; });
+document.getElementById('interval-select').addEventListener('change', function(e) { state.intervalMs = parseInt(e.target.value, 10); });
+
+// ══════════════════════════════════════════════════════════════════
+// CLÉ API
+// ══════════════════════════════════════════════════════════════════
+const apiKeyInput = document.getElementById('api-key-input');
+const apiPanel = document.getElementById('api-panel');
+const apiStatusLine = document.getElementById('api-status-line');
+const apiStatusText = document.getElementById('api-status-text');
+
+function refreshApiStatus() {
+    const key = localStorage.getItem(API_KEY_STORAGE);
+    if (key) {
+        apiPanel.classList.add('ok');
+        apiStatusLine.classList.add('ok');
+        apiStatusText.textContent = 'Clé enregistrée (' + key.slice(0, 6) + '…' + key.slice(-4) + ')';
+        apiKeyInput.value = key;
+    } else {
+        apiPanel.classList.remove('ok');
+        apiStatusLine.classList.remove('ok');
+        apiStatusText.textContent = 'Aucune clé API enregistrée';
+    }
+    updateGenerateButtonState();
+}
+document.getElementById('api-save-btn').addEventListener('click', function() {
+    const val = apiKeyInput.value.trim();
+    if (!val) { showToast('Collez une clé API', 'error'); return; }
+    localStorage.setItem(API_KEY_STORAGE, val);
+    refreshApiStatus();
+    showToast('Clé enregistrée', 'success');
+});
+refreshApiStatus();
+
+// ══════════════════════════════════════════════════════════════════
+// BOUTONS GÉNÉRER / ARRÊTER
+// ══════════════════════════════════════════════════════════════════
+document.getElementById('generate-btn').addEventListener('click', runGeneration);
+document.getElementById('stop-btn').addEventListener('click', function() {
+    state.stopRequested = true;
+    state.activeTimers.forEach(function(t) { clearTimeout(t); });
+    state.activeTimers = [];
+    showToast('Arrêt demandé…', 'warn');
+});
+</script>
+</body>
+</html>
