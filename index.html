@@ -196,6 +196,14 @@
         grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
         gap: 0.5rem;
     }
+    .toggle-row {
+        display: flex; align-items: center; gap: 0.6rem;
+        margin-top: 0.9rem; padding: 0.7rem 0.85rem;
+        border-radius: 10px; border: 1px solid var(--border); background: var(--panel-2);
+        cursor: pointer; font-size: 0.85rem; font-weight: 600;
+    }
+    .toggle-row input { width: 18px; height: 18px; accent-color: var(--accent); flex-shrink: 0; }
+    .toggle-hint { font-size: 0.72rem; color: var(--ink-dim); margin-top: 0.5rem; line-height: 1.5; }
     .theme-card {
         padding: 0.75rem 0.85rem; border-radius: 10px;
         border: 1px solid var(--border); background: var(--panel-2);
@@ -430,6 +438,17 @@
     <div class="section-body">
         <div class="section-content">
             <div class="themes-grid" id="themes-grid"></div>
+            <label class="toggle-row" for="sequence-toggle">
+                <input type="checkbox" id="sequence-toggle">
+                <span>🎬 Mode Séquence — continuité narrative entre les vidéos</span>
+            </label>
+            <div class="toggle-hint">
+                Au lieu de variantes indépendantes, enchaîne les actions d'un même thème dans l'ordre
+                (« Partie 1, 2, 3… ») pour donner l'impression d'une histoire qui continue.
+                Attention : ce n'est pas un vrai chaînage image par image (impossible techniquement pour
+                l'instant, l'hébergeur des vidéos ne l'autorise pas) — chaque vidéo repart de votre photo
+                d'origine, seule la narration des prompts se suit.
+            </div>
         </div>
     </div>
 </div>
@@ -573,6 +592,7 @@ const state = {
     durationFrames: 153,
     intensity: 'random',
     intervalMs: 75000,
+    sequenceMode: false,
     isRunning: false,
     stopRequested: false,
     queue: [],
@@ -772,16 +792,30 @@ const VOICE_STYLE_TEXT = {
     dramatic: 'an intense, theatrical delivery'
 };
 
-function buildVariantPrompt() {
-    const themeObj = pickThemeForVariant();
-    const action = pick(themeObj.actions);
-    const camera = pick(themeObj.cameras);
-    const lighting = pick(themeObj.lightings);
-    const ambiance = pick(themeObj.ambianceEffects);
+function buildVariantPrompt(index, total, lockedTheme) {
+    const themeObj = lockedTheme || pickThemeForVariant();
+    let action, camera, lighting, ambiance;
+    if (lockedTheme) {
+        // Mode séquence : on avance dans les actions du thème dans l'ordre plutôt qu'au hasard,
+        // pour donner une progression logique. On boucle si le nombre de clips dépasse le stock d'actions.
+        action = themeObj.actions[index % themeObj.actions.length];
+        camera = themeObj.cameras[index % themeObj.cameras.length];
+        lighting = themeObj.lightings[index % themeObj.lightings.length];
+        ambiance = themeObj.ambianceEffects[index % themeObj.ambianceEffects.length];
+    } else {
+        action = pick(themeObj.actions);
+        camera = pick(themeObj.cameras);
+        lighting = pick(themeObj.lightings);
+        ambiance = pick(themeObj.ambianceEffects);
+    }
     let intensity = state.intensity;
     if (intensity === 'random') intensity = pick(['subtle', 'moderate', 'strong']);
 
     const parts = [];
+    if (lockedTheme && index > 0) {
+        parts.push('This shot is the direct continuation of the previous one in the same sequence (part ' +
+            (index + 1) + ' of ' + total + '); keep the exact same momentum, framing style and setting.');
+    }
     parts.push(action + '.');
     parts.push('Camera: ' + camera + '.');
     parts.push('Lighting: ' + lighting + ', ' + ambiance + ' atmosphere.');
@@ -793,7 +827,9 @@ function buildVariantPrompt() {
         parts.push('The subject appears to be speaking, mouth movements and expression matching ' +
             (VOICE_STYLE_TEXT[state.voiceStyle] || 'a natural tone') + ', saying: "' + state.voiceText.trim() + '".');
     }
-    parts.push("Keep the subject's face, body and identity exactly consistent with the reference photo.");
+    parts.push(lockedTheme
+        ? "Keep the exact same character identity, outfit and setting as the rest of this sequence, consistent with the reference photo."
+        : "Keep the subject's face, body and identity exactly consistent with the reference photo.");
 
     return {
         promptText: parts.join(' '),
@@ -921,10 +957,14 @@ async function runGeneration() {
     state.failed = 0;
     state.queue = [];
     const n = state.variantCount;
+    // En mode séquence, on verrouille un seul thème pour tout le lot (cohérence visuelle),
+    // sinon chaque clip pioche son thème indépendamment.
+    const lockedTheme = state.sequenceMode ? pickThemeForVariant() : null;
     for (let i = 0; i < n; i++) {
-        const built = buildVariantPrompt();
+        const built = buildVariantPrompt(i, n, lockedTheme);
         state.queue.push({
             index: i + 1, status: 'pending', promptText: built.promptText, meta: built.meta,
+            sequencePart: state.sequenceMode,
             videoId: null, videoUrl: null, error: null
         });
     }
@@ -1032,10 +1072,11 @@ function renderQueue() {
 
     state.queue.slice(0, MAX_VISIBLE_QUEUE).forEach(function(item) {
         const shortAction = item.meta.action.length > 60 ? item.meta.action.slice(0, 60) + '…' : item.meta.action;
+        const label = item.sequencePart ? 'Partie' : 'Variante';
         html += '<div class="queue-item ' + item.status + '">' +
             '<div class="q-icon">' + (STATUS_ICON[item.status] || '⏳') + '</div>' +
             '<div class="q-info">' +
-            '<div class="q-name">Variante ' + item.index + ' — ' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</div>' +
+            '<div class="q-name">' + label + ' ' + item.index + ' — ' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</div>' +
             '<div class="q-variant">' + shortAction + '</div>' +
             '</div>' +
             '<div class="q-status" title="' + (item.error ? item.error.replace(/"/g, '&quot;') : '') + '">' + statusLabel(item) + '</div>' +
@@ -1054,9 +1095,10 @@ function renderGallery() {
     if (!doneItems.length) { gallery.style.display = 'none'; return; }
     gallery.style.display = 'block';
     grid.innerHTML = doneItems.map(function(item) {
+        const label = item.sequencePart ? ('Partie ' + item.index + ' — ') : '';
         return '<div class="gallery-item">' +
             '<video src="' + item.videoUrl + '" controls loop muted playsinline preload="metadata"></video>' +
-            '<div class="g-caption"><strong>' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</strong>' + item.meta.camera + '</div>' +
+            '<div class="g-caption"><strong>' + label + item.meta.themeEmoji + ' ' + item.meta.themeName + '</strong>' + item.meta.camera + '</div>' +
             '</div>';
     }).join('');
 }
@@ -1188,6 +1230,7 @@ renderThemes();
 document.getElementById('main-prompt').addEventListener('input', function(e) { state.mainPrompt = e.target.value; });
 document.getElementById('voice-text').addEventListener('input', function(e) { state.voiceText = e.target.value; });
 document.getElementById('voice-style-select').addEventListener('change', function(e) { state.voiceStyle = e.target.value; });
+document.getElementById('sequence-toggle').addEventListener('change', function(e) { state.sequenceMode = e.target.checked; });
 document.getElementById('duration-select').addEventListener('change', function(e) { state.durationFrames = parseInt(e.target.value, 10); });
 document.getElementById('intensity-select').addEventListener('change', function(e) { state.intensity = e.target.value; });
 document.getElementById('interval-select').addEventListener('change', function(e) { state.intervalMs = parseInt(e.target.value, 10); });
