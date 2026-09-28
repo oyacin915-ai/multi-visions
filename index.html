@@ -851,9 +851,10 @@ async function createVideoTask(item) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body)
         });
-        if (res.status === 429 && attempt < 3) {
+        if (res.status === 429 && attempt < 4) {
             attempt++;
-            await delay(5000 * Math.pow(2, attempt));
+            updateStatusBar(true, 'Limite de débit atteinte, nouvelle tentative dans ' + Math.round(8 * Math.pow(2, attempt)) + 's…');
+            await delay(8000 * Math.pow(2, attempt));
             continue;
         }
         if (res.status === 401 || res.status === 403) {
@@ -867,18 +868,36 @@ async function createVideoTask(item) {
 }
 
 async function pollVideo(videoId) {
+    let lastErrorMessage = null;
     for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
         if (state.stopRequested) return { status: 'stopped' };
         await delay(POLL_INTERVAL_SEC * 1000);
         if (state.stopRequested) return { status: 'stopped' };
         const res = await apiFetch('?video_id=' + encodeURIComponent(videoId), { method: 'GET' }, POLL_BASE);
         if (res.status === 401 || res.status === 403) throw new ApiKeyError(await parseErrorMessage(res));
-        if (!res.ok) continue; // erreur transitoire, on retente au prochain cycle
+        if (!res.ok) {
+            lastErrorMessage = await parseErrorMessage(res); // erreur transitoire, on retente au prochain cycle
+            continue;
+        }
         const json = await res.json();
-        if (json.status === 'completed' || json.status === 'failed') return json;
+        if (json.status === 'completed') return json;
+        if (json.status === 'failed') {
+            json._extractedError = extractFailureReason(json) || lastErrorMessage;
+            return json;
+        }
         if (typeof json.progress === 'number') updateItemProgress(videoId, json.progress);
     }
-    return { status: 'timeout' };
+    return { status: 'timeout', _extractedError: lastErrorMessage };
+}
+
+function extractFailureReason(obj) {
+    if (!obj) return null;
+    if (obj.error) return (obj.error.message || obj.error);
+    if (obj.message) return obj.message;
+    if (obj.failure_reason) return obj.failure_reason;
+    if (obj.reason) return obj.reason;
+    if (obj.metadata && obj.metadata.error) return obj.metadata.error;
+    return null;
 }
 
 function updateItemProgress(videoId, progress) {
@@ -945,8 +964,8 @@ async function runGeneration() {
                 recordTiming(state.durationFrames, Date.now() - startTime);
             } else {
                 item.status = 'failed';
-                item.error = (result.error && (result.error.message || result.error)) ||
-                    (result.status === 'timeout' ? 'Délai dépassé' : 'Échec de génération');
+                item.error = extractFailureReason(result) || result._extractedError ||
+                    (result.status === 'timeout' ? 'Délai dépassé (aucun détail renvoyé par l\'API)' : 'Échec de génération (aucun détail renvoyé par l\'API)');
                 state.failed++;
             }
         } catch (e) {
@@ -1018,7 +1037,7 @@ function renderQueue() {
             '<div class="q-name">Variante ' + item.index + ' — ' + item.meta.themeEmoji + ' ' + item.meta.themeName + '</div>' +
             '<div class="q-variant">' + shortAction + '</div>' +
             '</div>' +
-            '<div class="q-status">' + statusLabel(item) + '</div>' +
+            '<div class="q-status" title="' + (item.error ? item.error.replace(/"/g, '&quot;') : '') + '">' + statusLabel(item) + '</div>' +
             '</div>';
     });
     if (total > MAX_VISIBLE_QUEUE) {
