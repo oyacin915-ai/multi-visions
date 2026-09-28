@@ -957,8 +957,9 @@ async function runGeneration() {
                 item.status = 'pending';
                 break;
             }
-            if (result.status === 'completed' && result.metadata && result.metadata.url) {
-                item.videoUrl = result.metadata.url;
+            const finalUrl = result.url || (result.metadata && result.metadata.url) || (result.output && result.output.url);
+            if (result.status === 'completed' && finalUrl) {
+                item.videoUrl = finalUrl;
                 item.status = 'done';
                 state.completed++;
                 recordTiming(state.durationFrames, Date.now() - startTime);
